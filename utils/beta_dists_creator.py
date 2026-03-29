@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from yahooquery import Ticker
+import yfinance as yf
 import pandas as pd
 import os
 from beta import Beta
@@ -53,8 +53,10 @@ def create_beta_distribution(sample_returns, date_str: str, tickers: str) -> str
 
 def persist_tickers(tickers) -> str:
     filepath = 'data/tickers.txt'
-    if not os.path.exists(filepath):
-        with open(filepath, 'a+') as f:
+    if not os.path.exists(filepath) or (
+        pd.Timestamp.now() - pd.Timestamp(os.path.getmtime(filepath), unit='s')
+    ) > pd.Timedelta(weeks=1):
+        with open(filepath, 'w') as f:
             f.write(' '.join(map(str, tickers)))
 
     return filepath
@@ -78,22 +80,25 @@ def main():
     tickers_filepath = persist_tickers(tickers)
     tickers = open(tickers_filepath, 'r').read()
 
-    sample_data = Ticker(f'{tickers} {BENCHMARK_INDEX}', asynchronous=True).history(
-        period='3y', interval='1d'
-    )['adjclose']
+    ticker_list = tickers.split() + [BENCHMARK_INDEX]
+    batch_size = 500
+    frames = []
+    for i in range(0, len(ticker_list), batch_size):
+        batch = ticker_list[i : i + batch_size]
+        df = yf.download(batch, period='3y', interval='1d', auto_adjust=True, threads=False)
+        frames.append(df['Close'])
+    sample_data = pd.concat(frames, axis=1)
 
-    sample_returns = (
-        sample_data.unstack()
-        .T.pct_change(fill_method=None)
-        .dropna(axis='index', how='all')
-    )
+    sample_returns = sample_data.pct_change().dropna(axis='index', how='all')
     sample_returns.index = pd.DatetimeIndex(sample_returns.index).tz_localize(None)
     dates = pd.bdate_range(
         start=INITIAL_DATE, end=pd.to_datetime('now').tz_localize('EST').date()
     )
 
-    for date_str in dates:
+    for i, date_str in enumerate(dates):
+        print(f'[{i+1}/{len(dates)}] {date_str.date()}', end='\r')
         create_beta_distribution(sample_returns, date_str, tickers)
+    print()
 
 
 if __name__ == '__main__':
