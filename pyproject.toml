@@ -18,6 +18,7 @@ yahooquery = "^2.3.7"
 statsmodels = "^0.14.1"
 scikit-learn = "^1.4.1.post1"
 jupyterlab = "^4.3.0"
+fake-useragent = "^2.1.0"
 
 
 [build-system]
