@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import yfinance as yf
+import numpy as np
 import pandas as pd
 import os
 from beta import Beta
@@ -39,7 +40,7 @@ def create_beta_distribution(sample_returns, date_str: str, tickers: str) -> str
 
                     welch_betas['values'][ticker] = beta[1]
                     welch_betas['residuals'][ticker] = beta[0]
-                except KeyError:
+                except (KeyError, np.linalg.LinAlgError):
                     print(
                         f'{ticker} ({date_str}) was truncated out of dataframe and could not be calculated'
                     )
@@ -81,15 +82,47 @@ def main():
     tickers = open(tickers_filepath, 'r').read()
 
     ticker_list = tickers.split() + [BENCHMARK_INDEX]
+    cache_path = 'data/prices_cache.parquet'
+    start_date = '2020-01-01'
     batch_size = 500
-    frames = []
-    for i in range(0, len(ticker_list), batch_size):
-        batch = ticker_list[i : i + batch_size]
-        df = yf.download(batch, period='3y', interval='1d', auto_adjust=True, threads=False)
-        frames.append(df['Close'])
-    sample_data = pd.concat(frames, axis=1)
 
-    sample_returns = sample_data.pct_change().dropna(axis='index', how='all')
+    if os.path.exists(cache_path):
+        cached = pd.read_parquet(cache_path)
+        last_date = cached.index.max()
+        new_tickers = [t for t in ticker_list if t not in cached.columns]
+        next_date = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+
+        frames = [cached]
+
+        if new_tickers:
+            print(f'Fetching {len(new_tickers)} new tickers from {start_date}')
+            for i in range(0, len(new_tickers), batch_size):
+                batch = new_tickers[i : i + batch_size]
+                df = yf.download(batch, start=start_date, interval='1d', auto_adjust=True, threads=False)
+                if not df.empty:
+                    frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
+
+        print(f'Fetching new dates from {next_date}')
+        for i in range(0, len(ticker_list), batch_size):
+            batch = ticker_list[i : i + batch_size]
+            df = yf.download(batch, start=next_date, interval='1d', auto_adjust=True, threads=False)
+            if not df.empty:
+                frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
+
+        sample_data = pd.concat(frames)
+        sample_data = sample_data.groupby(sample_data.index).first()
+    else:
+        print('No cache found, downloading full history')
+        frames = []
+        for i in range(0, len(ticker_list), batch_size):
+            batch = ticker_list[i : i + batch_size]
+            df = yf.download(batch, start=start_date, interval='1d', auto_adjust=True, threads=False)
+            frames.append(df['Close'])
+        sample_data = pd.concat(frames, axis=1)
+
+    sample_data.to_parquet(cache_path)
+
+    sample_returns = sample_data.pct_change(fill_method=None).dropna(axis='index', how='all')
     sample_returns.index = pd.DatetimeIndex(sample_returns.index).tz_localize(None)
     dates = pd.bdate_range(
         start=INITIAL_DATE, end=pd.to_datetime('now').tz_localize('EST').date()
