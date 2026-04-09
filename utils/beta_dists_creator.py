@@ -39,7 +39,7 @@ def create_beta_distribution(sample_returns, date_str: str, tickers: str) -> str
                     ).welch()
 
                     welch_betas['values'][ticker] = beta[1]
-                    welch_betas['residuals'][ticker] = beta[0]
+                    welch_betas['residuals'][ticker] = beta[2]
                 except (KeyError, np.linalg.LinAlgError):
                     print(
                         f'{ticker} ({date_str}) was truncated out of dataframe and could not be calculated'
@@ -93,6 +93,7 @@ def main():
         next_date = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
 
         frames = [cached]
+        today = pd.Timestamp.now().normalize()
 
         if new_tickers:
             print(f'Fetching {len(new_tickers)} new tickers from {start_date}')
@@ -102,12 +103,15 @@ def main():
                 if not df.empty:
                     frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
 
-        print(f'Fetching new dates from {next_date}')
-        for i in range(0, len(ticker_list), batch_size):
-            batch = ticker_list[i : i + batch_size]
-            df = yf.download(batch, start=next_date, interval='1d', auto_adjust=True, threads=False)
-            if not df.empty:
-                frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
+        if pd.Timestamp(next_date) <= today:
+            print(f'Fetching new dates from {next_date}')
+            for i in range(0, len(ticker_list), batch_size):
+                batch = ticker_list[i : i + batch_size]
+                df = yf.download(batch, start=next_date, interval='1d', auto_adjust=True, threads=False)
+                if not df.empty:
+                    frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
+        else:
+            print('Cache is already up to date')
 
         sample_data = pd.concat(frames)
         sample_data = sample_data.groupby(sample_data.index).first()

@@ -24,13 +24,16 @@ class Beta:
         rho (float): decay rate
         Returns
         -------
-        numpy ndarray [beta, residual]
+        numpy ndarray [intercept, beta, residual_variance]
         """
         bm_min, bm_max = (1 - delta) * self.x, (1 + delta) * self.x
         lower, upper = np.minimum(bm_min, bm_max), np.maximum(bm_min, bm_max)
         y_winsorized = np.atleast_2d(np.clip(self.y, lower, upper))
         weights = np.exp(-rho * np.arange(self.n_obs)[::-1]) if rho else None
-        return np.ravel(self._ols(self.x_mat, y_winsorized, weights=weights))
+        coeffs = self._ols(self.x_mat, y_winsorized, weights=weights)
+        residuals = y_winsorized - self.x_mat @ coeffs
+        residual_var = float(np.var(residuals))
+        return np.append(np.ravel(coeffs), residual_var)
 
     def _ols(self, x, y, weights=None):
         if weights is None:
