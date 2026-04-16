@@ -31,9 +31,8 @@ class Beta:
         y_winsorized = np.atleast_2d(np.clip(self.y, lower, upper))
         weights = np.exp(-rho * np.arange(self.n_obs)[::-1]) if rho else None
         coeffs = self._ols(self.x_mat, y_winsorized, weights=weights)
-        residuals = y_winsorized - self.x_mat @ coeffs
-        residual_var = float(np.var(residuals))
-        return np.append(np.ravel(coeffs), residual_var)
+        day_residual = float(self.y[-1] - self.x_mat[-1] @ coeffs)
+        return np.append(np.ravel(coeffs), day_residual)
 
     def _ols(self, x, y, weights=None):
         if weights is None:
