@@ -103,7 +103,7 @@ def main():
                 if not df.empty:
                     frames.append(df['Close'] if len(batch) > 1 else df['Close'].to_frame(batch[0]))
 
-        if pd.Timestamp(next_date) <= today:
+        if pd.Timestamp(next_date) < today:
             print(f'Fetching new dates from {next_date}')
             for i in range(0, len(ticker_list), batch_size):
                 batch = ticker_list[i : i + batch_size]
