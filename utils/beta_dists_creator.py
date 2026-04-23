@@ -55,6 +55,14 @@ def persist_tickers(tickers, filepath: str | Path, refresh_after: pd.Timedelta |
     return str(path)
 
 
+def persist_retained_tickers(tickers, filepath: str | Path = RETAINED_TICKERS_PATH) -> str:
+    path = Path(filepath)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(" ".join(map(str, tickers)))
+
+    return str(path)
+
+
 def build_retained_ticker_universe(active_tickers, persisted_tickers=(), cached_tickers=()) -> list[str]:
     return merge_tickers(active_tickers, persisted_tickers, cached_tickers)
 
@@ -159,10 +167,13 @@ def main():
             df = yf.download(batch, start=start_date, interval="1d", auto_adjust=True, threads=False)
             frames.append(df["Close"])
         sample_data = pd.concat(frames, axis=1)
-        retained_tickers = build_retained_ticker_universe(active_tickers)
+        retained_tickers = build_retained_ticker_universe(
+            active_tickers,
+            persisted_tickers=load_tickers(RETAINED_TICKERS_PATH),
+        )
 
     sample_data.to_parquet(cache_path)
-    persist_tickers(retained_tickers, RETAINED_TICKERS_PATH)
+    persist_retained_tickers(retained_tickers, RETAINED_TICKERS_PATH)
 
     sample_returns = sample_data.pct_change(fill_method=None).dropna(axis="index", how="all")
     sample_returns.index = pd.DatetimeIndex(sample_returns.index).tz_localize(None)
