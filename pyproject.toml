@@ -21,6 +21,9 @@ jupyterlab = "^4.3.0"
 fake-useragent = "^2.1.0"
 yfinance = "^1.2.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+
 
 [build-system]
 requires = ["poetry-core"]
